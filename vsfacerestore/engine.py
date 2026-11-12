@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from .cache import OnceCache
-from .facehelper import FaceHelper
+from .facehelper import FFHQ_CROP, FaceHelper
 from .paste import paste_face
 from .restorer import Restorer, RestoreRequest
 from .tracking import DetectParams, Detection, Track, TrackParams, build_track, detect_frame, link
@@ -35,6 +35,7 @@ class FaceEngine:
         cache_frames: int = 256,
     ) -> None:
         self.restorer = restorer
+        self.geometry = getattr(restorer, "geometry", FFHQ_CROP)  # crops the model sees; tracking stays on FFHQ
         self.num_frames = num_frames
         self.radius = radius
         self.upscale = upscale
@@ -87,7 +88,7 @@ class FaceEngine:
             def crop(i: int, track: Track = track, crops: dict[int, np.ndarray] = crops) -> np.ndarray:
                 i = min(max(i, track.first), track.last)
                 if i not in crops:
-                    affine = self.helper.affine(track.landmarks[track.index(i)])
+                    affine = self.geometry.affine(track.landmarks[track.index(i)])
                     crops[i] = self.helper.align(frame(i), affine)
                 return crops[i]
 
@@ -103,11 +104,12 @@ class FaceEngine:
                 out,
                 face,
                 request.crop(n),
-                self.helper.affine(track.landmarks[i]),
+                self.geometry.affine(track.landmarks[i]),
                 self.upscale,
                 float(track.eye_dist[i]),
                 float(track.alpha[i]),
                 cls,
                 self.tone,
+                self.geometry.eye_dist,
             )
         return out

@@ -1,6 +1,6 @@
 """Stage 2 acceptance: DicFace extracted and wired into `restore(model='dicface')`.
 
-Checks (plan §7, stage 2):
+Checks:
   network    our extracted network against the original repository's on the same crops (same weights, same seed)
   window     our 'script' window (5 frames, first taken) against the original script's 20-frame window, index 10
   stability  frame-to-frame difference inside the face oval: DicFace centre/script, mean/random sampling, and

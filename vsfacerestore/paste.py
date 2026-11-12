@@ -39,9 +39,9 @@ def parse_mask(classes: np.ndarray, size: int = FACE_SIZE) -> np.ndarray:
     return m * _border_mask(size)
 
 
-def working_size(eye_dist: float, upscale: int) -> int:
+def working_size(eye_dist: float, upscale: int, crop_eye_dist: float = TEMPLATE_EYE_DIST) -> int:
     """Side of the working image: the crop at output resolution, at most 512."""
-    shrink = TEMPLATE_EYE_DIST / max(eye_dist, 1e-3) / upscale  # crop px per output px
+    shrink = crop_eye_dist / max(eye_dist, 1e-3) / upscale  # crop px per output px
     return FACE_SIZE if shrink <= 1 else max(8, round(FACE_SIZE / shrink))
 
 
@@ -55,15 +55,17 @@ def paste_face(
     alpha: float,
     classes: np.ndarray,
     tone: float,
+    crop_eye_dist: float = TEMPLATE_EYE_DIST,
 ) -> None:
     """Blend `restored` into `out` (uint8 levels, or float32 in 0..1; `upscale` times the source size) in place.
 
     `source`: the aligned crop of the original frame (tones), `affine`: source frame -> crop, `eye_dist`: eye
-    distance in source px, `alpha`: weight 0..1, `classes`: ParseNet classes of `restored`, `tone`: source px.
+    distance in source px, `alpha`: weight 0..1, `classes`: ParseNet classes of `restored`, `tone`: source px,
+    `crop_eye_dist`: eye distance in crop px of the model's crop geometry.
     """
     h_up, w_up = out.shape[:2]
-    scale = TEMPLATE_EYE_DIST / max(eye_dist, 1e-3)  # crop px per source px
-    size = working_size(eye_dist, upscale)
+    scale = crop_eye_dist / max(eye_dist, 1e-3)  # crop px per source px
+    size = working_size(eye_dist, upscale, crop_eye_dist)
     f = size / FACE_SIZE  # working px per crop px
 
     face = restored.astype(np.float32)

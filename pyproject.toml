@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "vsfacerestore"
 version = "0.0.1"
-description = "Temporal video face restoration (DicFace, KEEP) for VapourSynth"
+description = "Temporal video face restoration (DicFace, KEEP, PGTFormer) for VapourSynth"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE", "vsfacerestore/facexlib/LICENSE"]
 authors = [{ name = "Selur" }]
-keywords = ["VapourSynth", "face restoration", "DicFace", "KEEP", "PyTorch"]
+keywords = ["VapourSynth", "face restoration", "DicFace", "KEEP", "PGTFormer", "PyTorch"]
 classifiers = [
   "Environment :: GPU :: NVIDIA CUDA",
   "Operating System :: OS Independent",
@@ -28,10 +28,10 @@ dependencies = [
   "VapourSynth>=66",
 ]
 
-# the wheel ships the weights (about 1.7 GB); artifacts overrides the .gitignore rule that keeps them out of git
+# the wheel ships the weights (about 2.2 GB); artifacts overrides the .gitignore rule that keeps them out of git
 [tool.hatch.build.targets.wheel]
 packages = ["vsfacerestore"]
-artifacts = ["vsfacerestore/models/**/*.pth"]
+artifacts = ["vsfacerestore/models/**/*.pth", "vsfacerestore/models/**/*.safetensors"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["vsfacerestore/models/**/*.pth", "test/", "docs/"]
+exclude = ["vsfacerestore/models/**/*.pth", "vsfacerestore/models/**/*.safetensors", "test/", "docs/"]

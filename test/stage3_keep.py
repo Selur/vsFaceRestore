@@ -1,6 +1,6 @@
 """Stage 3 acceptance: KEEP extracted, block grid with crossfade and cache, `restore(model='keep')`.
 
-Checks (plan §7, stage 3):
+Checks:
   network   our extracted network against the original repository's on the same 20 crops
   borders   frame-to-frame steps at block borders: the original script's 20-frame pieces without overlap against
             our grid (20 frames, step 14, 6 frames crossfaded)

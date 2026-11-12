@@ -1,7 +1,8 @@
-"""Stage 4 acceptance: RGBS and RGBH input next to RGB24.
+"""RGBS and RGBH input next to RGB24.
 
-Checks (plan §7, stage 4):
-  rgb24      the repository code gives the same RGB24 frames as the installed package (byte-identical)
+Checks:
+  rgb24      the repository code gives the same RGB24 frames as the installed package (byte-identical; skipped for
+             a model the installed package does not have)
   rgbs       RGBS output: a frame without a face comes back exactly; with faces, away from the box around the pixels
              the RGB24 path changed nothing moves by half a level or more (the blend fades out over the whole aligned
              crop, so a float still moves where an 8-bit value rounds back), and the whole frame stays within one
@@ -10,7 +11,7 @@ Checks (plan §7, stage 4):
 
 Run with the VapourSynth addon's Python, nothing else on the GPU:
 
-    F:\\Vapoursynth\\python.exe test\\stage4_formats.py [--frames 41-46] [--keep]
+    F:\\Vapoursynth\\python.exe test\\stage4_formats.py [--model dicface] [--frames 41-46] [--keep]
 
 Each render runs in its own process (one model load each); frames land in J:\\tmp\\claude\\vsfacerestore\\stage4
 and are deleted at the end unless --keep is given.
@@ -29,7 +30,7 @@ WORK = r"J:\tmp\claude\vsfacerestore\stage4"
 CLIP = "20010901_Wedding. 04.avi"
 
 
-def render(source: str, fmt: str, first: int, last: int, out: str) -> None:
+def render(source: str, fmt: str, first: int, last: int, out: str, model: str) -> None:
     """Child process: `source` is 'repo' (this tree) or 'installed' (site-packages); writes one .npy per frame."""
     if source == "repo":
         sys.path.insert(0, ROOT)
@@ -43,7 +44,7 @@ def render(source: str, fmt: str, first: int, last: int, out: str) -> None:
     clip = load(CLIP)
     if fmt != "RGB24":
         clip = clip.resize.Point(format=getattr(vs, fmt))
-    clip = vsfacerestore.restore(clip, model="dicface")
+    clip = vsfacerestore.restore(clip, model=model)
     os.makedirs(out, exist_ok=True)
     for n in range(first, last + 1):
         f = clip.get_frame(n)
@@ -52,9 +53,9 @@ def render(source: str, fmt: str, first: int, last: int, out: str) -> None:
     print("rendered", source, fmt, vsfacerestore.__file__)
 
 
-def run_render(source: str, fmt: str, first: int, last: int) -> str:
+def run_render(source: str, fmt: str, first: int, last: int, model: str) -> str:
     out = os.path.join(WORK, "%s-%s" % (source, fmt))
-    subprocess.run([sys.executable, os.path.abspath(__file__), "--render", source, fmt, str(first), str(last), out], check=True)
+    subprocess.run([sys.executable, os.path.abspath(__file__), "--render", source, fmt, str(first), str(last), out, model], check=True)
     return out
 
 
@@ -66,9 +67,10 @@ def load(folder: str, first: int, last: int):
 
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "--render":
-        render(sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), sys.argv[6])
+        render(sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), sys.argv[6], sys.argv[7])
         return 0
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default="dicface")
     parser.add_argument("--frames", default="41-46")  # two frames before the face appears, four with it
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
@@ -77,15 +79,19 @@ def main() -> int:
     import numpy as np
 
     findings = []
-    folders = {key: run_render(*key, first, last) for key in (("installed", "RGB24"), ("repo", "RGB24"), ("repo", "RGBS"), ("repo", "RGBH"))}
+    renders = [("repo", "RGB24"), ("repo", "RGBS"), ("repo", "RGBH")]
+    compare_installed = args.model in ("dicface", "keep")
+    if compare_installed:
+        renders.insert(0, ("installed", "RGB24"))
+    folders = {key: run_render(*key, first, last, args.model) for key in renders}
     sys.path.insert(0, os.path.join(ROOT, "test"))
     import vapoursynth as vs  # noqa: E402
     from testclips import source as load_clip  # noqa: E402
 
     src_clip = load_clip(CLIP)
     src_float = src_clip.resize.Point(format=vs.RGBS)  # the exact floats the RGBS render started from
-    installed = load(folders[("installed", "RGB24")], first, last)
     rgb24 = load(folders[("repo", "RGB24")], first, last)
+    installed = load(folders[("installed", "RGB24")], first, last) if compare_installed else rgb24
     rgbs = load(folders[("repo", "RGBS")], first, last)
     rgbh = load(folders[("repo", "RGBH")], first, last)
 

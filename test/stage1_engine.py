@@ -1,6 +1,6 @@
 """Stage 1 acceptance: window engine, tracks, filter, alpha and paste.
 
-Checks (plan §7, stage 1):
+Checks:
   order     same frames when reading forwards, backwards and in random order, with 1 and with 6 threads
   detect    about one detection per frame when reading in order
   jump      time of a cold frame after a jump against a warm one

@@ -2,7 +2,7 @@
 
 The engine hands a restorer one request per face of the output frame. A request knows its track and can give the
 aligned crop of that face at any frame of the track (edges repeated), so a per-frame model takes one crop, DicFace
-a window of five, KEEP a block. Requests of one frame come together so a model can batch them.
+a window of five, PGTFormer a window of three, KEEP a block. Requests of one frame come together so a model can batch them.
 """
 
 from __future__ import annotations
@@ -24,6 +24,8 @@ class RestoreRequest:
 
 
 class Restorer(Protocol):
+    # optional attribute `geometry` (facehelper.CropGeometry): how the crops sit on the face; FFHQ alignment without it
+
     def restore(self, requests: list[RestoreRequest]) -> list[np.ndarray]:
         """Restored 512x512 BGR uint8 crops, one per request, for `request.frame`."""
         ...

@@ -1,4 +1,4 @@
-"""Per-frame face restoration inside the VapourSynth graph (stage 0 harness).
+"""Per-frame face restoration inside the VapourSynth graph (reference harness for the helper).
 
 Every frame on its own: detect, align, restore each face with a caller-supplied function, paste back. No
 tracking, no smoothing, no temporal model: this exists to check the helper and the paste against the CodeFormer

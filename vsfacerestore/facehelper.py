@@ -3,9 +3,9 @@
 Built on facexlib's `FaceRestoreHelper` (MIT), reduced to functions over numpy images. Images are BGR uint8
 arrays (h, w, 3) as OpenCV uses them; aligned faces are 512x512 crops on the FFHQ five-point template.
 
-Stage 0: this module reproduces the per-frame behaviour of the CodeFormer route (detection on the frame scaled
-up to at least `resize` on the short side, square soft mask fused with the ParseNet mask). Stage 1 replaces the
-paste with the track-based one from the plan.
+Detection and `paste` reproduce the per-frame behaviour of the CodeFormer route (detection on the frame scaled up
+to at least `resize` on the short side, square soft mask fused with the ParseNet mask); the filter itself pastes
+with the track-based `paste.paste_face`.
 """
 
 from __future__ import annotations
@@ -86,6 +86,29 @@ def face_detail(crop: np.ndarray, eye_dist: float) -> float:
     return float((b1 - b2)[inner].std() / (b2[inner].std() + 8))
 
 
+@dataclass(frozen=True, eq=False)
+class CropGeometry:
+    """How a model's 512x512 crops sit on the face: a five-point template, with or without rotation."""
+
+    template: np.ndarray  # (5, 2) landmark positions in the crop
+    rotate: bool = True  # False: scale and shift only, the crop stays axis-parallel to the frame
+
+    @property
+    def eye_dist(self) -> float:
+        return eye_distance(self.template)
+
+    def affine(self, landmarks: np.ndarray) -> np.ndarray:
+        """Transform (2, 3) from frame coordinates onto the crop."""
+        if self.rotate:  # cv2.LMEDS for the equivalence to skimage's transform (facexlib)
+            return cv2.estimateAffinePartial2D(landmarks, self.template, method=cv2.LMEDS)[0]
+        lc, tc = landmarks.mean(0), self.template.mean(0)
+        s = float(np.sqrt(((self.template - tc) ** 2).sum() / max(((landmarks - lc) ** 2).sum(), 1e-9)))
+        return np.array([[s, 0.0, tc[0] - s * lc[0]], [0.0, s, tc[1] - s * lc[1]]])
+
+
+FFHQ_CROP = CropGeometry(FACE_TEMPLATE)
+
+
 def visibility(classes: np.ndarray) -> float:
     """Share of the face oval the parser sees as face parts."""
     return float(np.isin(classes[FACE_OVAL], PARSE_FACE_IDS).mean())
@@ -164,9 +187,8 @@ class FaceHelper:
 
     @staticmethod
     def affine(landmarks: np.ndarray) -> np.ndarray:
-        """Similarity transform (2, 3) from frame coordinates onto the 512x512 template."""
-        # cv2.LMEDS for the equivalence to skimage's transform (facexlib)
-        return cv2.estimateAffinePartial2D(landmarks, FACE_TEMPLATE, method=cv2.LMEDS)[0]
+        """Similarity transform (2, 3) from frame coordinates onto the 512x512 FFHQ template."""
+        return FFHQ_CROP.affine(landmarks)
 
     @staticmethod
     def align(img: np.ndarray, affine: np.ndarray) -> np.ndarray:
@@ -199,7 +221,7 @@ class FaceHelper:
         return self.parse_batch([face])[0]
 
     def parse_mask(self, face: np.ndarray) -> np.ndarray:
-        """Soft face mask (512, 512) float64 in [0, 1] from the parsing, as facexlib's paste uses it (stage 0)."""
+        """Soft face mask (512, 512) float64 in [0, 1] from the parsing, as facexlib's paste uses it."""
         classes = self.parse(face)
         mask = np.zeros(classes.shape)
         for idx, value in enumerate(PARSE_FACE_CLASSES):

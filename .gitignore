@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 vsfacerestore/models/**/*.pth
+vsfacerestore/models/**/*.safetensors
 build/
 dist/
 *.egg-info/

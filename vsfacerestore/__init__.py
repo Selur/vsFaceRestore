@@ -1,4 +1,4 @@
-"""vsfacerestore: temporal video face restoration for VapourSynth with DicFace and KEEP."""
+"""vsfacerestore: temporal video face restoration for VapourSynth with DicFace, KEEP and PGTFormer."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ __version__ = "0.0.1"
 
 os.environ.setdefault("CUDA_MODULE_LOADING", "LAZY")
 
-MODELS = ("dicface", "keep")
+MODELS = ("dicface", "keep", "pgtformer")
 
 
 def restore(
@@ -28,6 +28,7 @@ def restore(
     window: str = "centre",
     sample: str = "mean",
     batch: int = 1,
+    crop: str = "vfhq",
     sharpness: float | None = None,
     min_eye_dist: float | None = None,
     min_visibility: float | None = None,
@@ -40,19 +41,21 @@ def restore(
 
     :param clip:            progressive RGB24, RGBS or RGBH clip (deinterlace first). The faces are restored at
                             8 bit whatever the format; a float clip keeps its precision everywhere else.
-    :param model:           'dicface' or 'keep'.
+    :param model:           'dicface', 'keep' or 'pgtformer'.
     :param bg_clip:         background already at `upscale` times the size of `clip`; bilinear otherwise.
     :param upscale:         output size factor.
     :param radius:          frames before and after the current one that tracking and smoothing may look at;
                             default 15 for DicFace, 24 for KEEP (its 20-frame blocks must fit the window).
     :param tone:            structure coarser than this many source pixels comes from the source face.
     :param weight:          fidelity weight of the model, 0 = codebook only, 1 = closest to the input (DicFace
-                            only; 1.0 as in the original script).
+                            and PGTFormer; 1.0 as in the original scripts).
     :param device_index:    CUDA device.
     :param half:            float16 for face detection and parsing (the restoration model stays float32).
     :param window:          DicFace: 'centre' (frames n-2 ... n+2) or 'script' (n ... n+4, as the original script).
     :param sample:          DicFace: 'mean' (deterministic) or 'random' (the original's Dirichlet sampling, seeded).
-    :param batch:           DicFace: faces per network call.
+    :param batch:           DicFace and PGTFormer: faces per network call.
+    :param crop:            PGTFormer: 'vfhq' (face at the scale of its training crops, steadiest) or 'ffhq' (the
+                            aligned crops of DicFace and KEEP, more detail on small faces).
     :param sharpness:       faces whose sharpness score stays below this are left untouched, and the blend weight
                             ramps up from this value to twice it (default 0.04; tapewake's "do not invent detail
                             on blurry faces" setting is 0.14; a soft DV face scores about 0.08-0.10, VHS faces
@@ -65,7 +68,8 @@ def restore(
     :param track:           tracking, filter and alpha parameters (TrackParams); the four keywords above
                             override its fields.
     :param model_dir:       folder with the weights (`detection_Resnet50_Final.pth`, `parsing_parsenet.pth`,
-                            `dicface/bfr_100k.pth`, `keep/KEEP-b76feb75.pth`); default `vsfacerestore/models`
+                            `dicface/bfr_100k.pth`, `keep/KEEP-b76feb75.pth`, `pgtformer/model.safetensors`);
+                            default `vsfacerestore/models`
                             inside the package.
     """
     import dataclasses
@@ -89,6 +93,8 @@ def restore(
     validate(clip, bg_clip, upscale, radius)
     if not 0.0 <= weight <= 1.0:
         raise vs.Error("restore: weight must be between 0.0 and 1.0")
+    if crop not in ("vfhq", "ffhq"):
+        raise vs.Error("restore: crop must be 'vfhq' or 'ffhq'")
 
     overrides = {}
     if sharpness is not None:
@@ -113,7 +119,11 @@ def restore(
         raise vs.Error("restore: CUDA is not available")
     device = torch.device("cuda", device_index)
     model_dir = model_dir or MODEL_DIR
-    weights = {"dicface": os.path.join("dicface", "bfr_100k.pth"), "keep": os.path.join("keep", "KEEP-b76feb75.pth")}
+    weights = {
+        "dicface": os.path.join("dicface", "bfr_100k.pth"),
+        "keep": os.path.join("keep", "KEEP-b76feb75.pth"),
+        "pgtformer": os.path.join("pgtformer", "model.safetensors"),
+    }
     for name in ("detection_Resnet50_Final.pth", "parsing_parsenet.pth", weights[model]):
         if not os.path.isfile(os.path.join(model_dir, name)):
             raise vs.Error(f"restore: weight file {name!r} not found in model_dir {model_dir!r}")
@@ -121,6 +131,10 @@ def restore(
         from .dicface import DicFaceRestorer
 
         restorer = DicFaceRestorer(device, weight, window, sample, batch, model_path=os.path.join(model_dir, weights[model]))
+    elif model == "pgtformer":
+        from .pgtformer import PGTFormerRestorer
+
+        restorer = PGTFormerRestorer(device, weight, batch, crop, model_path=os.path.join(model_dir, weights[model]))
     else:
         from .keep import KEEPRestorer
 
