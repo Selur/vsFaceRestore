@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+vsfacerestore/models/**/*.pth
+build/
+dist/
+*.egg-info/
+
+# local notes, not published
+docs/
+CLAUDE.md
